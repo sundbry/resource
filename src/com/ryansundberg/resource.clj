@@ -127,6 +127,16 @@
     (dissoc ::external-dependency-set)
     (dissoc ::subresource-set)))
 
+(defn- seq-difference-helper [result-seq seq-a set-b]
+  (if-let [item (first seq-a)]
+    (if (contains? set-b item)
+      (recur result-seq (next seq-a) set-b)
+      (recur (conj result-seq item) (next seq-a) set-b))
+    result-seq))
+    
+(defn- seq-difference [seq-a set-b]
+  (seq-difference-helper [] seq-a set-b))
+
 (defn- init-resource
   [self]
   {:pre (some? ::dependencies self)}
@@ -134,7 +144,7 @@
   ;; all external dependencies have been injected
   (let [dep-graph (build-dependency-graph (dep/graph) (vals (::subresources self)))
         dep-order (dep/topo-sort dep-graph)
-        subresource-order (difference dep-order (::external-dependency-set self))]
+        subresource-order (seq-difference dep-order (::external-dependency-set self))]
     (prn "Subresource order: " subresource-order)
     (-> self
       (init-subresources subresource-order)
