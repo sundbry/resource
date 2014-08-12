@@ -2,7 +2,7 @@
 ;;; A library for structuring application resources similar to Stuart Sierra's Component.
 (ns com.ryansundberg.resource
   (:require 
-    [clojure.set :refer [difference]]
+    [clojure.set :refer [difference union]]
     [com.stuartsierra.dependency :as dep]))
 
 (defn- decorate-resource
@@ -55,15 +55,16 @@
                (into {} (map 
                           (fn [subresource]
                             [(::name subresource)
-                             (configure subresource)]))))
-        sub-deps (reduce merge
+                             (configure subresource)])
+                          (::subresource-set self))))
+        sub-deps (reduce union
                          #{}
                          (map ::external-dependency-set (vals (::subresources self-with-subresources))))
-        external-deps (merge
+        external-deps (union
                         (::dependency-set self) ; explicit dependencies
                         (difference; subresource dependences minus sublings
                           sub-deps
-                          (keys (::subresources self))))]
+                          (set (keys (::subresources self-with-subresources)))))]
     (assoc self-with-subresources ::external-dependency-set external-deps)))
 
 (defmethod configure ::resource
@@ -75,7 +76,7 @@
   (let [result (configure-deps self)]
     (if (empty? (::external-dependency-set result))
       result
-      (throw (ex-info "System has unmet dependencies" (::external-dependency-set result))))))
+      (throw (ex-info "System has unmet dependencies" result)))))
 
 (defn- add-graph-dependencies
   [dep-graph dependent-name dependency-names]
@@ -110,11 +111,13 @@
 (defn- init-subresources
   [self subresource-order]
   (if-let [subresource-name (first subresource-order)]
-    (update-in self [::subresources subresource-name]
-               (fn [subresource]
-                 (initialize
-                   (assoc subresource ::dependencies
-                          (select-dependencies self (::external-dependency-set subresource))))))
+    (recur
+      (update-in self [::subresources subresource-name]
+                 (fn [subresource]
+                   (initialize
+                     (assoc subresource ::dependencies
+                            (select-dependencies self (::external-dependency-set subresource))))))
+      (next subresource-order))
     self))
 
 (defn- clean-initialized-resource
@@ -127,10 +130,12 @@
 (defn- init-resource
   [self]
   {:pre (some? ::dependencies self)}
+  (prn (str "Initializing " (::name self)))
   ;; all external dependencies have been injected
   (let [dep-graph (build-dependency-graph (dep/graph) (vals (::subresources self)))
         dep-order (dep/topo-sort dep-graph)
         subresource-order (difference dep-order (::external-dependency-set self))]
+    (prn "Subresource order: " subresource-order)
     (-> self
       (init-subresources subresource-order)
       (clean-initialized-resource))))
