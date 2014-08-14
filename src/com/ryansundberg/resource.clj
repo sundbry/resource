@@ -5,6 +5,13 @@
     [clojure.set :refer [difference union]]
     [com.stuartsierra.dependency :as dep]))
 
+(defmacro enable-debugging [] true)
+
+(defmacro debug-log [args]
+  (if (enable-debugging)
+    `(prn ~args)
+    nil))
+
 (defn- decorate-resource
   [instance resource-name resource-type dependency-names subresource-set]
   (merge instance
@@ -90,9 +97,10 @@
   [dep-graph subresources]
   (if-let [subresource (first subresources)]
     (recur
-      (add-graph-dependencies dep-graph 
-                              (::name subresource)
-                              (::external-dependency-set subresource))
+      (-> dep-graph
+        (dep/depend ::parent (::name subresource)) ; add subresource as dependent of parent
+        (add-graph-dependencies (::name subresource) ; add dependencies of subresource
+                                (::external-dependency-set subresource)))
       (next subresources))
     dep-graph))
 
@@ -140,13 +148,12 @@
 (defn- init-resource
   [self]
   {:pre (some? ::dependencies self)}
-  (prn (str "Initializing " (::name self)))
+  (debug-log (str "Initializing " (::name self)))
   ;; all external dependencies have been injected
   (let [dep-graph (build-dependency-graph (dep/graph) (vals (::subresources self)))
         dep-order (dep/topo-sort dep-graph)
-        subresource-order (seq-difference dep-order (::external-dependency-set self))]
-    (prn "Subresource order: " subresource-order)
-    (-> self
+        subresource-order (seq-difference dep-order (conj (::external-dependency-set self) ::parent))]
+    (-> (vary-meta self assoc ::subresource-order subresource-order)
       (init-subresources subresource-order)
       (clean-initialized-resource))))
 
@@ -157,3 +164,10 @@
 (defmethod initialize ::system
   [self]
   (init-resource (assoc self ::dependencies {})))
+
+#_(defn invoke
+  "Invoke a function on resources in dependency order"
+  [root func &args]
+  (apply func
+         (cons (invoke-subresources root (::subresource-order (meta root)) func &args)
+               args)))

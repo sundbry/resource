@@ -17,9 +17,9 @@
                      #{"Logger"})}))
       
 (defn define-agent-resource
-  []
+  [agent-id]
   (make-resource (->Foo)
-                 (str "Agent-" (rand-int 999))
+                 (str "Agent-" agent-id)
                  #{"Logger" "Database"}))
       
 (defn define-medium-system
@@ -35,7 +35,9 @@
       (make-resource (->Foo)
                      "Agents"
                      #{}
-                     (repeatedly 3 define-agent-resource))}))
+                     (map define-agent-resource (range 1 4)))
+      (make-resource (->Foo)
+                     "Leaf")}))
 
 (deftest configure-simple-system
   (let [sys (define-simple-system)
