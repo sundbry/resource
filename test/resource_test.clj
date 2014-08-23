@@ -1,7 +1,7 @@
-(ns com.ryansundberg.resource-test
+(ns resource-test
   (:require 
     [clojure.test :refer [deftest is]]
-    [com.ryansundberg.resource :refer :all]))
+    [resource :refer :all]))
 
 (defrecord Foo [])
 
@@ -39,12 +39,17 @@
       (make-resource (->Foo)
                      "Leaf")}))
 
-(deftest configure-simple-system
+(deftest init-simple-system
   (let [sys (define-simple-system)
-        sys-configd (configure sys)]
-    (prn sys-configd)))
+        sys-initd (initialize sys)]
+    (prn sys-initd)))
 
-(deftest configure-medium-system
-  (let [sys (define-medium-system)
-        sys-configd (configure sys)]
-    (prn sys-configd)))
+(deftest init-medium-system
+  (let [sys (initialize (define-medium-system))]        
+    (prn sys)))
+
+(deftest test-with-resources
+  (let [sys (initialize (define-medium-system))]  
+    (with-resources sys ["Database" "Agents"]
+      (is (some? Database))
+      (is (some? Agents)))))

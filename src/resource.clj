@@ -1,13 +1,14 @@
 ;;; @author Ryan Sundberg <ryan.sundberg@gmail.com>
 ;;; A library for structuring application resources similar to Stuart Sierra's Component.
-(ns com.ryansundberg.resource
+(ns resource
+  (:refer-clojure :exclude [require name])
   (:require 
     [clojure.set :refer [difference union]]
     [com.stuartsierra.dependency :as dep]))
 
-(defmacro enable-debugging [] true)
+(defmacro ^:private enable-debugging [] false)
 
-(defmacro debug-log [args]
+(defmacro ^:private debug-log [args]
   (if (enable-debugging)
     `(prn ~args)
     nil))
@@ -16,13 +17,32 @@
   [instance resource-name resource-type dependency-names subresource-set]
   (merge instance
          {::type resource-type
-          ::name resource-name          
+          ::name resource-name
+          ::owner-full-name nil
           ::dependency-set (set dependency-names)
           ::external-dependency-set nil
           ::dependencies nil ; becomes dict of named dependencies
           ::subresource-set (set subresource-set)
           ::subresources nil ; becomes dict of subresources owned by this
           }))
+
+; ["res1" "res2" ]
+; becomes (let [res1 (require "res1") res2 (require "res2")] ...)
+(defn- resource-bindings
+  [self bindings resource-names]
+  {:pre [(symbol? self)]}
+  (if-let [resource-name (first resource-names)]
+    (recur
+      self
+      (conj bindings (symbol resource-name) `(require ~self ~resource-name))
+      (next resource-names))
+    bindings))
+
+(defmacro with-resources
+  [self resource-names & forms]
+  (let [self-sym (gensym)
+        bindings (vec (resource-bindings self-sym [self-sym self] resource-names))]
+    `(let ~bindings ~@forms)))
 
 (defn make-resource
   "Decorate a map object to become a resource"
@@ -50,10 +70,41 @@
   [system-name]
   (make-system {} system-name))
 
+
+(defn acquire
+  [self resource-name]
+  "Return a named subresource or dependency, or nil"
+  (if-let [sibling (get (::subresources self) resource-name)]
+    sibling
+    (if-let [dependency (get (::dependencies self) resource-name)]
+      dependency
+      nil)))
+
+(defn require
+  [self resource-name]
+  "Return a named subresource or dependency. Throw on failure."
+  (if-let [resource (acquire self resource-name)]
+    resource
+    (throw (ex-info (str "Failed to require resource: " resource-name) self))))
+
+(defn name
+  [self]
+  (::name self))
+
+(defn full-name
+  [self]
+  (if (some? (::owner-full-name self))
+    (str (::owner-full-name self) "." (::name self))
+    (::name self)))
+
+(defn subresources
+  [self]
+  (vals (::subresources self)))
+
 (derive ::system ::resource)
 
-(defmulti configure ::type)
-(defmulti initialize ::type)
+(defmulti ^:private configure ::type)
+(defmulti ^:private construct ::type)
 
 (defn- configure-deps
   [self]
@@ -62,7 +113,10 @@
                (into {} (map 
                           (fn [subresource]
                             [(::name subresource)
-                             (configure subresource)])
+                             (configure
+                               (assoc subresource
+                                      ::owner-full-name
+                                      (full-name self)))])
                           (::subresource-set self))))
         sub-deps (reduce union
                          #{}
@@ -105,30 +159,25 @@
     dep-graph))
 
 (defn- select-dependencies
-  [resource dependency-set]
+  [self dependency-set]
   (into {}
         (map (fn [dependency-name]
-               [dependency-name
-                (if-let [sibling (get (::subresources resource) dependency-name)]
-                  sibling
-                  (if-let [external (get (::dependencies resource) dependency-name)]
-                    external
-                    (throw (ex-info (str "Failed to load dependency: " dependency-name) resource))))])
+               [dependency-name (require self dependency-name)])
              dependency-set)))
               
-(defn- init-subresources
+(defn- construct-subresources
   [self subresource-order]
   (if-let [subresource-name (first subresource-order)]
     (recur
       (update-in self [::subresources subresource-name]
                  (fn [subresource]
-                   (initialize
+                   (construct
                      (assoc subresource ::dependencies
                             (select-dependencies self (::external-dependency-set subresource))))))
       (next subresource-order))
     self))
 
-(defn- clean-initialized-resource
+(defn- clean-constructed-resource
   [self]
   (-> self
     (dissoc ::dependency-set)
@@ -145,7 +194,7 @@
 (defn- seq-difference [seq-a set-b]
   (seq-difference-helper [] seq-a set-b))
 
-(defn- init-resource
+(defn- construct-resource
   [self]
   {:pre (some? ::dependencies self)}
   (debug-log (str "Initializing " (::name self)))
@@ -154,16 +203,35 @@
         dep-order (dep/topo-sort dep-graph)
         subresource-order (seq-difference dep-order (conj (::external-dependency-set self) ::parent))]
     (-> (vary-meta self assoc ::subresource-order subresource-order)
-      (init-subresources subresource-order)
-      (clean-initialized-resource))))
+      (construct-subresources subresource-order)
+      (clean-constructed-resource))))
 
-(defmethod initialize ::resource
+(defmethod construct ::resource
   [self]
-  (init-resource self))
+  (construct-resource self))
 
-(defmethod initialize ::system
+(defmethod construct ::system
   [self]
-  (init-resource (assoc self ::dependencies {})))
+  (construct-resource (assoc self ::dependencies {})))
+
+(defn initialize
+  [system]
+  (construct (configure system)))
+
+(defn- apply-each
+  [dict dict-rest func args]
+  (if-let [[k v] (first dict-rest)]
+    (recur
+      (assoc dict k (apply func v args))
+      (next dict-rest)
+      func
+      args)
+    dict))
+
+(defn apply-subresources
+  [self func & args]
+  "Invoke a function on all subresources"
+  (assoc self ::subresources (apply-each {} (::subresources self) func args)))
 
 #_(defn invoke
   "Invoke a function on resources in dependency order"
