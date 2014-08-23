@@ -1,5 +1,6 @@
-(defproject ryansundberg/resource "0.1.8-SNAPSHOT"
-  :description "Managed lifecycle of stateful objects with dependency determination"
+(defproject sundbry/resource "0.1.9-SNAPSHOT"
+  :description "System resource library with automatic dependency resolution"
+  :author "Ryan Sundberg <ryan.sundberg@gmail.com>"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :min-lein-version "2.1.3"

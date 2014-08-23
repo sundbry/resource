@@ -1,7 +1,7 @@
-(ns resource-test
+(ns sundbry.resource-test
   (:require 
     [clojure.test :refer [deftest is]]
-    [resource :refer :all]))
+    [sundbry.resource :refer :all]))
 
 (defrecord Foo [])
 

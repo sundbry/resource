@@ -1,6 +1,6 @@
 ;;; @author Ryan Sundberg <ryan.sundberg@gmail.com>
 ;;; A library for structuring application resources similar to Stuart Sierra's Component.
-(ns resource
+(ns sundbry.resource
   (:refer-clojure :exclude [require name])
   (:require 
     [clojure.set :refer [difference union]]
