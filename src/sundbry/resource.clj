@@ -4,6 +4,7 @@
   (:refer-clojure :exclude [require name])
   (:require 
     [clojure.set :refer [difference union]]
+    [nightshell.redl :refer [break]]
     [com.stuartsierra.dependency :as dep]))
 
 (defmacro ^:private enable-debugging [] false)
@@ -15,6 +16,13 @@
 
 (defn- decorate-resource
   [instance resource-name resource-type dependency-names subresource-set]
+  (doseq [dep-name (seq dependency-names)]
+    (when (nil? dep-name)
+      (throw (ex-info "Dependency name is nil" {:dependency-names dependency-names}))))
+  (doseq [sub (seq subresource-set)]
+    (when (nil? sub)
+      (throw (ex-info "Subresource is nil" {:dependency-names dependency-names}))))
+                
   (merge instance
          {::type resource-type
           ::name resource-name
@@ -219,23 +227,43 @@
   (construct (configure system)))
 
 (defn- apply-each
-  [dict dict-rest func args]
-  (if-let [[k v] (first dict-rest)]
-    (recur
-      (assoc dict k (apply func v args))
-      (next dict-rest)
-      func
-      args)
-    dict))
+  ([starting-dict func args]
+    (apply-each {} starting-dict func args))
+  ([dict dict-rest func args]
+    ;{:post [(map? %)]}
+    (if-let [[k v] (first dict-rest)]
+      (recur
+        (assoc dict k (if args
+                        (apply func v args)
+                        (func v)))
+        (next dict-rest)
+        func
+        args)
+      dict)))
 
 (defn apply-subresources
-  [self func & args]
-  "Invoke a function on all subresources"
-  (assoc self ::subresources (apply-each {} (::subresources self) func args)))
+  [self func args]
+  "Apply a function on all subresources"
+  (assoc self ::subresources (apply-each (::subresources self) func args)))
 
-#_(defn invoke
+(defn invoke-subresources
+  [self func & args]  
+  "Invoke a function on all subresources"
+  (apply-subresources self func args))
+
+(defn apply-subresources-recursive
+  [self func args]
+  "Apply a function on all subresources, and their subresources"
+  (if-let [subs (::subresources self)]
+    (if (empty? subs)
+      (apply func (break self) (break args))
+      (assoc self ::subresources
+             (apply-each subs apply-subresources-recursive [func args])))
+    self))
+
+(defn invoke
   "Invoke a function on resources in dependency order"
-  [root func &args]
-  (apply func
-         (cons (invoke-subresources root (::subresource-order (meta root)) func &args)
-               args)))
+  ; TODO update dependencies
+  [root func & args]
+  (let [inside (apply-subresources-recursive root func (break args))]
+    (apply func inside args)))
