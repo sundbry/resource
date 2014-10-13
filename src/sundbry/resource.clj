@@ -227,16 +227,17 @@
   (construct (configure system)))
 
 (defn- apply-each
-  ([starting-dict func args]
-    (apply-each {} starting-dict func args))
-  ([dict dict-rest func args]
+  ([src-dict order func args]
+    (apply-each {} src-dict order func args))
+  ([dict src-dict order func args]
     ;{:post [(map? %)]}
-    (if-let [[k v] (first dict-rest)]
+    (if-let [k (first order)]
       (recur
         (assoc dict k (if args
-                        (apply func v args)
-                        (func v)))
-        (next dict-rest)
+                        (apply func (get src-dict k) args)
+                        (func (get src-dict k))))
+        src-dict
+        (next order)
         func
         args)
       dict)))
@@ -244,26 +245,67 @@
 (defn apply-subresources
   [self func args]
   "Apply a function on all subresources"
-  (assoc self ::subresources (apply-each (::subresources self) func args)))
+  (assoc self ::subresources (apply-each (::subresources self)
+                                         (::subresource-order (meta self))
+                                         func args)))
 
 (defn invoke-subresources
   [self func & args]  
   "Invoke a function on all subresources"
   (apply-subresources self func args))
 
+(defn apply-subresources-parallel
+  [self func args]
+  (update-in self [::subresources]
+             (fn [subs]
+               (into {} (pmap
+                          (fn [[k v]] [k (apply func v args)])
+                          subs)))))
+
+(defn invoke-subresources-parallel
+  [self func & args]
+  (apply-subresources-parallel self func args))
+
+(defn apply-subresources-reverse
+  [self func args]
+  "Apply a function on all subresources in reverse order"
+  (assoc self ::subresources (apply-each (::subresources self)
+                                         (reverse (::subresource-order (meta self)))
+                                         func args)))
+
+(defn invoke-subresources-reverse
+  [self func & args]
+  (apply-subresources-reverse self func args))
+
 (defn apply-subresources-recursive
   [self func args]
   "Apply a function on all subresources, and their subresources"
-  (if-let [subs (::subresources self)]
-    (if (empty? subs)
-      (apply func (break self) (break args))
-      (assoc self ::subresources
-             (apply-each subs apply-subresources-recursive [func args])))
-    self))
+  (apply func
+         (if-let [subs (::subresources self)]
+           (assoc self ::subresources
+                  (apply-each subs (::subresource-order (meta self))
+                              apply-subresources-recursive [func args]))
+           self)
+         args))
 
-(defn invoke
-  "Invoke a function on resources in dependency order"
-  ; TODO update dependencies
+(defn apply-subresources-recursive-reverse
+  [self func args]
+  "Apply a function on all subresources, and their subresources"
+  (apply func
+         (if-let [subs (::subresources self)]
+           (assoc self ::subresources
+                  (apply-each subs (reverse (::subresource-order (meta self)))
+                              apply-subresources-recursive-reverse [func args]))
+           self)
+         args))
+
+(defn invoke-visit
   [root func & args]
-  (let [inside (apply-subresources-recursive root func (break args))]
-    (apply func inside args)))
+  "Invoke a function on self and subresources recursively, in dependency order"
+  ; TODO does not update dependencies, so this does not change exiting references to resources!
+  (apply-subresources-recursive root func args))
+
+(defn invoke-visit-reverse
+  [root func & args]
+  "Invoke a function on self and subresources recursively, in reverse dependency order"
+  (apply-subresources-recursive-reverse root func args))

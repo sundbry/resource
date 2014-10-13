@@ -55,9 +55,19 @@
       (is (some? Database))
       (is (some? Agents)))))
 
-(deftest test-invoke
+(deftest test-invoke-visit
   (let [sys (initialize (define-medium-system))
-        sys2 (invoke sys (fn [x y] (comment "Visiting resource:" (name x) "param:" y) x) "P")]
+        sys2 (invoke-visit sys (fn [x y] (comment "Visiting resource:" (name x) "param:" y) x) "P")]
     (is (= sys sys2))
-    (let [sys3 (invoke sys (fn [x] (assoc x :something true)))]
+    (let [sys3 (invoke-visit sys (fn [x] (assoc x :something true)))]
       (is (not= sys sys3)))))
+
+(defn- count-resources
+  [self]
+  (apply + 1 (subresources self)))
+
+(deftest test-invoke-visit-2
+  (let [sys (initialize (define-medium-system))
+        resource-count (invoke-visit sys count-resources)]
+    (is (= 8 resource-count))))
+

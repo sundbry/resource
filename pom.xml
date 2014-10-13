@@ -3,7 +3,7 @@
   <groupId>sundbry</groupId>
   <artifactId>resource</artifactId>
   <packaging>jar</packaging>
-  <version>0.2.0-SNAPSHOT</version>
+  <version>0.2.4-SNAPSHOT</version>
   <name>resource</name>
   <description>System resource library with automatic dependency resolution</description>
   <url>https://github.com/ryansundberg/resource</url>
@@ -16,7 +16,7 @@
   <scm>
     <connection>scm:git:git://github.com/ryansundberg/resource.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/ryansundberg/resource.git</developerConnection>
-    <tag>2989b7b68a3d074d3f5e9bf4211defc8efa1c4e1
+    <tag>49c224171b5284d26797cddf1181394ac1dbb932
 </tag>
     <url>https://github.com/ryansundberg/resource</url>
   </scm>
@@ -67,6 +67,11 @@
       <groupId>com.stuartsierra</groupId>
       <artifactId>dependency</artifactId>
       <version>0.1.1</version>
+    </dependency>
+    <dependency>
+      <groupId>sundbry</groupId>
+      <artifactId>nightshell</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.clojure</groupId>
