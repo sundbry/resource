@@ -4,7 +4,7 @@
   (:refer-clojure :exclude [require name])
   (:require 
     [clojure.set :refer [difference union]]
-    [nightshell.redl :refer [break]]
+    ;[nightshell.redl :refer [break]]
     [com.stuartsierra.dependency :as dep]))
 
 (defmacro ^:private enable-debugging [] false)

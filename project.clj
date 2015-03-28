@@ -1,4 +1,4 @@
-(defproject sundbry/resource "0.2.4-SNAPSHOT"
+(defproject sundbry/resource "0.2.4"
   :description "System resource library with automatic dependency resolution"
   :author "Ryan Sundberg <ryan.sundberg@gmail.com>"
   :url "https://github.com/ryansundberg/resource"
@@ -7,8 +7,8 @@
   :min-lein-version "2.1.3"
   :main sundbry.resource
   :plugins []
-  :dependencies [[com.stuartsierra/dependency "0.1.1"]
-                 [sundbry/nightshell "0.1.0-SNAPSHOT"]]
+  :dependencies [[com.stuartsierra/dependency "0.1.1"]]
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.6.0"]
-                                  [org.clojure/tools.namespace "0.2.4"]]
+                                  [org.clojure/tools.namespace "0.2.4"]
+                                  [sundbry/nightshell "0.1.0-SNAPSHOT"]]
                    :source-paths ["dev"]}})
