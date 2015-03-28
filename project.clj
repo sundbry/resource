@@ -5,7 +5,6 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :min-lein-version "2.1.3"
-  :main sundbry.resource
   :plugins []
   :dependencies [[com.stuartsierra/dependency "0.1.1"]]
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.6.0"]
