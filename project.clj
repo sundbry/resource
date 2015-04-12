@@ -1,4 +1,4 @@
-(defproject sundbry/resource "0.2.4"
+(defproject sundbry/resource "0.3.0"
   :description "System resource library with automatic dependency resolution"
   :author "Ryan Sundberg <ryan.sundberg@gmail.com>"
   :url "https://github.com/ryansundberg/resource"

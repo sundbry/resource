@@ -1,10 +1,9 @@
 ;;; @author Ryan Sundberg <ryan.sundberg@gmail.com>
 ;;; A library for structuring application resources similar to Stuart Sierra's Component.
 (ns sundbry.resource
-  (:refer-clojure :exclude [require name])
+  (:refer-clojure :exclude [name require])
   (:require 
     [clojure.set :refer [difference union]]
-    ;[nightshell.redl :refer [break]]
     [com.stuartsierra.dependency :as dep]))
 
 (defmacro ^:private enable-debugging [] false)
@@ -78,7 +77,6 @@
   [system-name]
   (make-system {} system-name))
 
-
 (defn acquire
   [self resource-name]
   "Return a named subresource or dependency, or nil"
@@ -115,6 +113,7 @@
 (defmulti ^:private construct ::type)
 
 (defn- configure-deps
+  "Determine my ::subresources and ::external-dependency-set"
   [self]
   (let [self-with-subresources
         (assoc self ::subresources
@@ -134,7 +133,10 @@
                         (difference; subresource dependences minus sublings
                           sub-deps
                           (set (keys (::subresources self-with-subresources)))))]
-    (assoc self-with-subresources ::external-dependency-set external-deps)))
+    (-> self-with-subresources
+        (assoc ::external-dependency-set external-deps)
+        (dissoc ::dependency-set)
+        (dissoc ::subresource-set))))
 
 (defmethod configure ::resource
   [self]
@@ -174,23 +176,18 @@
              dependency-set)))
               
 (defn- construct-subresources
-  [self subresource-order]
+  [self subresource-order ctor]
   (if-let [subresource-name (first subresource-order)]
     (recur
       (update-in self [::subresources subresource-name]
                  (fn [subresource]
                    (construct
                      (assoc subresource ::dependencies
-                            (select-dependencies self (::external-dependency-set subresource))))))
-      (next subresource-order))
+                            (select-dependencies self (::external-dependency-set subresource)))
+                     ctor)))
+      (next subresource-order)
+      ctor)
     self))
-
-(defn- clean-constructed-resource
-  [self]
-  (-> self
-    (dissoc ::dependency-set)
-    (dissoc ::external-dependency-set)
-    (dissoc ::subresource-set)))
 
 (defn- seq-difference-helper [result-seq seq-a set-b]
   (if-let [item (first seq-a)]
@@ -203,28 +200,64 @@
   (seq-difference-helper [] seq-a set-b))
 
 (defn- construct-resource
-  [self]
+  [self ctor]
   {:pre (some? ::dependencies self)}
-  (debug-log (str "Initializing " (::name self)))
   ;; all external dependencies have been injected
-  (let [dep-graph (build-dependency-graph (dep/graph) (vals (::subresources self)))
-        dep-order (dep/topo-sort dep-graph)
-        subresource-order (seq-difference dep-order (conj (::external-dependency-set self) ::parent))]
-    (-> (vary-meta self assoc ::subresource-order subresource-order)
-      (construct-subresources subresource-order)
-      (clean-constructed-resource))))
+  ; (debug-log (str "Initializing " (::name self)))
+  (let [self
+        (if (some? (::subresource-order (meta self)))
+          self
+          (let [dep-graph (build-dependency-graph (dep/graph) (vals (::subresources self)))
+                dep-order (dep/topo-sort dep-graph)
+                subresource-order (seq-difference dep-order (conj (::external-dependency-set self) ::parent))]
+            (vary-meta self assoc ::subresource-order subresource-order)))]
+    (-> self
+        (construct-subresources (::subresource-order (meta self)) ctor)
+        (ctor))))
+
+(declare deconstruct-resource)
+
+(defn- deconstruct-subresources
+  [self reverse-subresource-order dtor]
+  (if-let [subresource-name (first reverse-subresource-order)]
+    (recur
+      (update-in self [::subresources subresource-name]
+                 (fn [subresource]
+                   (deconstruct-resource
+                     (assoc subresource ::dependencies
+                            (select-dependencies self (::external-dependency-set subresource)))
+                     dtor)))
+      (next reverse-subresource-order)
+      dtor)
+    self))
+
+(defn- deconstruct-resource
+  [self dtor]
+  {:pre (some? ::dependencies self)}
+  ;; all external dependencies have been injected
+  (-> self
+      (dtor)
+      (deconstruct-subresources (reverse (::subresource-order (meta self))) dtor)))
 
 (defmethod construct ::resource
-  [self]
-  (construct-resource self))
+  [self ctor]
+  (construct-resource self ctor))
 
 (defmethod construct ::system
-  [self]
-  (construct-resource (assoc self ::dependencies {})))
+  [self ctor]
+  (construct-resource (assoc self ::dependencies {}) ctor))
 
 (defn initialize
   [system]
-  (construct (configure system)))
+  (construct (configure system) identity))
+
+(defn invoke
+  [system func]
+  (construct system func))
+
+(defn invoke-reverse
+  [system func]
+  (deconstruct-resource system func))
 
 (defn- apply-each
   ([src-dict order func args]
