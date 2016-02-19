@@ -252,12 +252,16 @@
   (construct (configure system) identity))
 
 (defn invoke
-  [system func]
-  (construct system func))
+  [self func]
+  (construct self func))
 
 (defn invoke-reverse
-  [system func]
-  (deconstruct-resource system func))
+  [self func]
+  (deconstruct-resource self func))
+
+(defn invoke-subresource
+  [self resource-name func]
+  (update-in self [::subresources resource-name] func))
 
 (defn- apply-each
   ([src-dict order func args]

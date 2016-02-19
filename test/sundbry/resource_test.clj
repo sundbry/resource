@@ -89,3 +89,8 @@
     (is (= sys3 sys5))
     (is (= sys sys6))
     (is (= sys sys8))))
+
+(deftest test-invoke-subresource
+  (let [sys (res/initialize (define-medium-system))
+        sys2 (res/invoke-subresource sys "Logger" #(assoc % :hello "world!"))]
+    (is (= "world!" (:hello (res/require sys2 "Logger"))))))
