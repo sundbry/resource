@@ -41,7 +41,7 @@
   (if-let [resource-name (first resource-names)]
     (recur
       self
-      (conj bindings (symbol resource-name) `(require ~self ~resource-name))
+      (conj bindings (symbol (clojure.core/name resource-name)) `(require ~self ~resource-name))
       (next resource-names))
     bindings))
 
@@ -223,10 +223,7 @@
     (recur
       (update-in self [::subresources subresource-name]
                  (fn [subresource]
-                   (deconstruct-resource
-                     (assoc subresource ::dependencies
-                            (select-dependencies self (::external-dependency-set subresource)))
-                     dtor)))
+                   (deconstruct-resource subresource dtor)))
       (next reverse-subresource-order)
       dtor)
     self))
@@ -262,87 +259,3 @@
 (defn invoke-subresource
   [self resource-name func]
   (update-in self [::subresources resource-name] func))
-
-(defn- apply-each
-  ([src-dict order func args]
-    (apply-each {} src-dict order func args))
-  ([dict src-dict order func args]
-    ;{:post [(map? %)]}
-    (if-let [k (first order)]
-      (recur
-        (assoc dict k (if args
-                        (apply func (get src-dict k) args)
-                        (func (get src-dict k))))
-        src-dict
-        (next order)
-        func
-        args)
-      dict)))
-
-(defn apply-subresources
-  [self func args]
-  "Apply a function on all subresources"
-  (assoc self ::subresources (apply-each (::subresources self)
-                                         (::subresource-order (meta self))
-                                         func args)))
-
-(defn invoke-subresources
-  [self func & args]  
-  "Invoke a function on all subresources"
-  (apply-subresources self func args))
-
-(defn apply-subresources-parallel
-  [self func args]
-  (update-in self [::subresources]
-             (fn [subs]
-               (into {} (pmap
-                          (fn [[k v]] [k (apply func v args)])
-                          subs)))))
-
-(defn invoke-subresources-parallel
-  [self func & args]
-  (apply-subresources-parallel self func args))
-
-(defn apply-subresources-reverse
-  [self func args]
-  "Apply a function on all subresources in reverse order"
-  (assoc self ::subresources (apply-each (::subresources self)
-                                         (reverse (::subresource-order (meta self)))
-                                         func args)))
-
-(defn invoke-subresources-reverse
-  [self func & args]
-  (apply-subresources-reverse self func args))
-
-(defn apply-subresources-recursive
-  [self func args]
-  "Apply a function on all subresources, and their subresources"
-  (apply func
-         (if-let [subs (::subresources self)]
-           (assoc self ::subresources
-                  (apply-each subs (::subresource-order (meta self))
-                              apply-subresources-recursive [func args]))
-           self)
-         args))
-
-(defn apply-subresources-recursive-reverse
-  [self func args]
-  "Apply a function on all subresources, and their subresources"
-  (apply func
-         (if-let [subs (::subresources self)]
-           (assoc self ::subresources
-                  (apply-each subs (reverse (::subresource-order (meta self)))
-                              apply-subresources-recursive-reverse [func args]))
-           self)
-         args))
-
-(defn invoke-visit
-  [root func & args]
-  "Invoke a function on self and subresources recursively, in dependency order"
-  ; TODO does not update dependencies, so this does not change exiting references to resources!
-  (apply-subresources-recursive root func args))
-
-(defn invoke-visit-reverse
-  [root func & args]
-  "Invoke a function on self and subresources recursively, in reverse dependency order"
-  (apply-subresources-recursive-reverse root func args))

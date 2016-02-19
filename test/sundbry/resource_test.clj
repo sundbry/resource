@@ -39,6 +39,17 @@
       (make-resource (->Foo)
                      "Leaf")}))
 
+(defn define-keyword-system
+  []
+  (make-system
+    (->Foo)
+      :app
+      #{(make-resource (->Foo)
+                       :log)
+        (make-resource (->Foo)
+                       :db
+                       #{:log})}))
+
 (deftest init-simple-system
   (let [sys (define-simple-system)
         sys-initd (res/initialize sys)]
@@ -48,27 +59,23 @@
   (let [sys (res/initialize (define-medium-system))]        
     (is (instance? Foo sys))))
 
+(deftest init-keyword-system
+  (let [sys (res/initialize (define-keyword-system))]        
+    (is (instance? Foo sys))))
+
 (deftest test-with-resources
   (let [sys (res/initialize (define-medium-system))]  
     (res/with-resources sys ["Database" "Agents"]
       (is (some? Database))
-      (is (some? Agents)))))
-
-(deftest test-invoke-visit
-  (let [sys (res/initialize (define-medium-system))
-        sys2 (res/invoke-visit sys (fn [x y] (comment "Visiting resource:" (name x) "param:" y) x) "P")]
-    (is (= sys sys2))
-    (let [sys3 (res/invoke-visit sys (fn [x] (assoc x :something true)))]
-      (is (not= sys sys3)))))
+      (is (some? Agents))))
+  (let [sys (res/initialize (define-keyword-system))]  
+    (res/with-resources sys [:db :log]
+      (is (some? db))
+      (is (some? log)))))
 
 (defn- count-resources
   [self]
   (apply + 1 (res/subresources self)))
-
-(deftest test-invoke-visit-2
-  (let [sys (res/initialize (define-medium-system))
-        resource-count (res/invoke-visit sys count-resources)]
-    (is (= 8 resource-count))))
 
 (deftest test-invoke
   (let [sys (res/initialize (define-medium-system))
@@ -89,6 +96,18 @@
     (is (= sys3 sys5))
     (is (= sys sys6))
     (is (= sys sys8))))
+
+(deftest test-invoke-2
+  (let [sys (res/initialize (define-medium-system))
+        resource-count (res/invoke sys count-resources)]
+    (is (= 8 resource-count))))
+
+(deftest test-invoke-3
+  (let [sys (res/initialize (define-medium-system))
+        sys2 (res/invoke sys (fn [x] (comment "Visiting resource:" (name x)) x))]
+    (is (= sys sys2))
+    (let [sys3 (res/invoke sys (fn [x] (assoc x :something true)))]
+      (is (not= sys sys3)))))
 
 (deftest test-invoke-subresource
   (let [sys (res/initialize (define-medium-system))
